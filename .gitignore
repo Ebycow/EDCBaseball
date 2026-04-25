@@ -2,4 +2,4 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
-config.local.py
+config_local.py
