@@ -43,6 +43,16 @@ def _is_mlb(title: str) -> bool:
     return any(kw in title for kw in MLB_KEYWORDS)
 
 
+def _match_mlb_source(channel: dict, mlb_source: str) -> bool:
+    if mlb_source == 'all':
+        return True
+    if mlb_source == 'nhk':
+        return bool(channel.get('nhk'))
+    if mlb_source == 'jsports':
+        return channel.get('name', '').startswith('J SPORTS')
+    return True
+
+
 def _find_npb_team(title: str) -> Optional[str]:
     for team in NPB_TEAMS:
         if any(kw in title for kw in team['keywords']):
@@ -64,6 +74,7 @@ def search_baseball(
     base_url: str,
     team: Optional[str] = None,
     mlb_only: bool = False,
+    mlb_source: str = 'all',
     npb_only: bool = False,
     days: int = 7,
     live_only: bool = False,
@@ -120,6 +131,9 @@ def search_baseball(
 
             # --npb は AND 条件: MLB を除外する
             if npb_only and _is_mlb(title):
+                continue
+
+            if _is_mlb(title) and not _match_mlb_source(ch, mlb_source):
                 continue
 
             results.append({
