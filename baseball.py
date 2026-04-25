@@ -62,7 +62,7 @@ def _fmt_event(ev: dict) -> str:
     return f"  {date_str} {time_str} {live_mark}{league} [{ev['channel_name']}] {ev['title']} ({relay_note}{duration})"
 
 
-def _can_merge_event_relay(prev: dict, cur: dict) -> bool:
+def _is_same_relay_program(prev: dict, cur: dict) -> bool:
     if not (prev.get('is_nhk') and cur.get('is_nhk')):
         return False
     if not (prev['is_live'] and cur['is_live']):
@@ -71,12 +71,19 @@ def _can_merge_event_relay(prev: dict, cur: dict) -> bool:
         return False
     if prev['is_mlb'] != cur['is_mlb']:
         return False
-    if prev['channel_name'] == cur['channel_name']:
-        return False
+    return True
 
+
+def _can_follow_event_relay(prev: dict, cur: dict) -> bool:
+    if not _is_same_relay_program(prev, cur):
+        return False
     prev_end = prev['starttime'] + timedelta(seconds=prev['duration_sec'])
     gap = cur['starttime'] - prev_end
-    return timedelta(0) <= gap <= _RELAY_GAP
+    if not (timedelta(0) <= gap <= _RELAY_GAP):
+        return False
+
+    prev_last_channel = prev.get('relay_last_channel', prev['channel_name'])
+    return prev_last_channel != cur['channel_name'] or prev.get('is_event_relay', False)
 
 
 def _find_relay_merge_target(merged: list[dict], cur: dict) -> Optional[dict]:
@@ -84,9 +91,25 @@ def _find_relay_merge_target(merged: list[dict], cur: dict) -> Optional[dict]:
         prev_end = prev['starttime'] + timedelta(seconds=prev['duration_sec'])
         if cur['starttime'] - prev_end > _RELAY_GAP:
             break
-        if _can_merge_event_relay(prev, cur):
+        if _can_follow_event_relay(prev, cur):
             return prev
     return None
+
+
+def _extend_relay_chain(prev: dict, cur: dict) -> None:
+    relay_channels = list(prev.get('relay_channels', [prev['channel_name']]))
+    if not relay_channels or relay_channels[-1] != cur['channel_name']:
+        relay_channels.append(cur['channel_name'])
+
+    merged_end = max(
+        prev['starttime'] + timedelta(seconds=prev['duration_sec']),
+        cur['starttime'] + timedelta(seconds=cur['duration_sec']),
+    )
+    prev['duration_sec'] = int((merged_end - prev['starttime']).total_seconds())
+    prev['relay_channels'] = relay_channels
+    prev['relay_last_channel'] = cur['channel_name']
+    prev['channel_name'] = ' -> '.join(relay_channels)
+    prev['is_event_relay'] = True
 
 
 def _merge_event_relays(events: list[dict]) -> list[dict]:
@@ -97,21 +120,11 @@ def _merge_event_relays(events: list[dict]) -> list[dict]:
     for ev in sorted(events, key=lambda x: x['starttime']):
         cur = dict(ev)
         cur.setdefault('relay_channels', [cur['channel_name']])
+        cur.setdefault('relay_last_channel', cur['channel_name'])
 
         prev = _find_relay_merge_target(merged, cur)
         if prev is not None:
-            relay_channels = list(prev.get('relay_channels', [prev['channel_name']]))
-            if cur['channel_name'] not in relay_channels:
-                relay_channels.append(cur['channel_name'])
-
-            merged_end = max(
-                prev['starttime'] + timedelta(seconds=prev['duration_sec']),
-                cur['starttime'] + timedelta(seconds=cur['duration_sec']),
-            )
-            prev['duration_sec'] = int((merged_end - prev['starttime']).total_seconds())
-            prev['relay_channels'] = relay_channels
-            prev['channel_name'] = ' -> '.join(relay_channels)
-            prev['is_event_relay'] = True
+            _extend_relay_chain(prev, cur)
             continue
 
         merged.append(cur)
@@ -127,10 +140,15 @@ def _select_ttrec_targets(events: list[dict]) -> tuple[list[dict], list[dict]]:
     skipped_relays: list[dict] = []
 
     for ev in sorted(events, key=lambda x: x['starttime']):
-        if _find_relay_merge_target(targets, ev) is not None:
+        prev = _find_relay_merge_target(targets, ev)
+        if prev is not None:
+            _extend_relay_chain(prev, ev)
             skipped_relays.append(ev)
             continue
-        targets.append(ev)
+        target = dict(ev)
+        target.setdefault('relay_channels', [target['channel_name']])
+        target.setdefault('relay_last_channel', target['channel_name'])
+        targets.append(target)
 
     return targets, skipped_relays
 
