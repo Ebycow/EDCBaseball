@@ -11,7 +11,10 @@ _EXCLUDE_TITLE_PATTERNS = [
     "プロ野球ニュース",
     "ファーム",
     "MLBイッキ見",
-    "練習"
+    "練習",
+    "特集",
+    "ワースポ",
+    "ドキュメント",
 ]
 
 
@@ -51,6 +54,26 @@ def _match_mlb_source(channel: dict, mlb_source: str) -> bool:
     if mlb_source == 'jsports':
         return channel.get('name', '').startswith('J SPORTS')
     return True
+
+
+def _is_likely_recorded_game(title: str, is_mlb: bool) -> bool:
+    """Return True if a non-live program looks like an official game broadcast."""
+    if is_mlb:
+        # J SPORTS recorded MLB: title always contains "メジャーリーグ中継"
+        return 'メジャーリーグ中継' in title
+    # NPB: require two distinct team keywords (clear matchup signal)
+    return _find_npb_matchup(title)
+
+
+def _find_npb_matchup(title: str) -> bool:
+    """Return True if title contains two distinct NPB team keywords."""
+    found = 0
+    for team in NPB_TEAMS:
+        if any(kw in title for kw in team['keywords']):
+            found += 1
+            if found >= 2:
+                return True
+    return False
 
 
 def _find_npb_team(title: str) -> Optional[str]:
@@ -115,33 +138,38 @@ def search_baseball(
             if ch.get('nhk') and ev['duration_sec'] < 300:
                 continue
 
-            if live_only and not _is_live(title, ch):
+            is_live = _is_live(title, ch)
+            if live_only and not is_live:
+                continue
+
+            is_mlb = _is_mlb(title)
+            if not is_live and not _is_likely_recorded_game(title, is_mlb):
                 continue
 
             # --team と --mlb は OR 条件: どちらかにマッチすればよい
             if mlb_only and team_keywords:
-                if not (_is_mlb(title) or any(kw in title for kw in team_keywords)):
+                if not (is_mlb or any(kw in title for kw in team_keywords)):
                     continue
             elif mlb_only:
-                if not _is_mlb(title):
+                if not is_mlb:
                     continue
             elif team_keywords:
                 if not any(kw in title for kw in team_keywords):
                     continue
 
             # --npb は AND 条件: MLB を除外する
-            if npb_only and _is_mlb(title):
+            if npb_only and is_mlb:
                 continue
 
-            if _is_mlb(title) and not _match_mlb_source(ch, mlb_source):
+            if is_mlb and not _match_mlb_source(ch, mlb_source):
                 continue
 
             results.append({
                 **ev,
                 'channel_name': ch['name'],
                 'is_nhk': bool(ch.get('nhk')),
-                'is_live': _is_live(title, ch),
-                'is_mlb': _is_mlb(title),
+                'is_live': is_live,
+                'is_mlb': is_mlb,
                 'npb_team': _find_npb_team(title),
             })
 
