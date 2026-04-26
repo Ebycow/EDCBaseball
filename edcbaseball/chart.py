@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Optional
 
 from .channels import BASEBALL_CHANNELS
+from .teams import extract_matchup, MLB_KEYWORDS
 
 _WEEKDAY = ["月", "火", "水", "木", "金", "土", "日"]
 _CHANNEL_ORDER = {ch['name']: i for i, ch in enumerate(BASEBALL_CHANNELS)}
@@ -72,7 +73,8 @@ def _render_row(n_cols: int, events: list[dict]) -> str:
         _fill(s, e, fill)
 
         if blen >= 4:
-            label = _abbrev(ev['title'])
+            is_mlb = any(kw in ev['title'] for kw in MLB_KEYWORDS)
+            label = ('' if is_mlb else extract_matchup(ev['title'])) or _abbrev(ev['title'])
             # Overlay label starting 1 col after block start, leaving 1 col at end
             _overlay(s + 1, e - 1, label)
 
