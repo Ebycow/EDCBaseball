@@ -97,8 +97,8 @@ def search_baseball(
             continue
 
         for ev in events:
-            # Future events only
-            if ev['starttime'] < now or ev['starttime'] > cutoff:
+            end_time = ev['starttime'] + timedelta(seconds=ev['duration_sec'])
+            if end_time <= now or ev['starttime'] > cutoff:
                 continue
 
             title = ev['title']

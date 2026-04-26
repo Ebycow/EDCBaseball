@@ -59,7 +59,10 @@ def _fmt_event(ev: dict) -> str:
     live_mark = '[生]' if ev['is_live'] else '[録]'
     league = '[MLB]' if ev['is_mlb'] else '[NPB]'
     relay_note = 'イベントリレー, ' if ev.get('is_event_relay') else ''
-    return f"  {date_str} {time_str} {live_mark}{league} [{ev['channel_name']}] {ev['title']} ({relay_note}{duration})"
+    now = datetime.now()
+    on_air = ev['starttime'] <= now < ev['starttime'] + timedelta(seconds=ev['duration_sec'])
+    on_air_mark = ' ★放送中' if on_air else ''
+    return f"  {date_str} {time_str} {live_mark}{league} [{ev['channel_name']}] {ev['title']} ({relay_note}{duration}){on_air_mark}"
 
 
 def _is_same_relay_program(prev: dict, cur: dict) -> bool:
@@ -296,12 +299,20 @@ def main():
         key = dt.strftime(f'%Y/%m/%d ({wd})')
         by_date[key].append(ev)
 
+    now = datetime.now()
     total = 0
-    for date_key in sorted(by_date.keys()):
+    for i in range(args.days):
+        day = now + timedelta(days=i)
+        wd = _WEEKDAY_JA[day.weekday()]
+        date_key = day.strftime(f'%Y/%m/%d ({wd})')
         print(f"── {date_key} " + "─" * 35)
-        for ev in sorted(by_date[date_key], key=lambda x: x['starttime']):
-            print(_fmt_event(ev))
-            total += 1
+        day_events = sorted(by_date.get(date_key, []), key=lambda x: x['starttime'])
+        if day_events:
+            for ev in day_events:
+                print(_fmt_event(ev))
+                total += 1
+        else:
+            print("  なし")
         print()
 
     print(f"合計 {total} 件")
