@@ -1,13 +1,16 @@
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Optional
 
 
 class TTRecClient:
-    def __init__(self, base_url: str, timeout: int = 15):
+    def __init__(self, base_url: str, timeout: int = 15, verify_attempts: int = 3, verify_interval: float = 0.5):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.verify_attempts = max(1, verify_attempts)
+        self.verify_interval = verify_interval
 
     def _request(self, method: str, path: str, payload: Optional[dict] = None):
         data = None
@@ -54,7 +57,20 @@ class TTRecClient:
             'startTime': event['starttime'].strftime('%Y-%m-%dT%H:%M:%S'),
             'duration': event['duration_sec'],
         }
-        return self._request('POST', '/api/ttrec/reserve/default', payload)
+        result = self._request('POST', '/api/ttrec/reserve/default', payload)
+        if isinstance(result, dict):
+            if result.get('error'):
+                raise RuntimeError(result['error'])
+            if result.get('success') is False:
+                raise RuntimeError(result.get('message') or result.get('note') or 'TTRec予約に失敗しました')
+
+        for attempt in range(self.verify_attempts):
+            reserves = self.get_reserves()
+            if any(_same_event(event, reserve) or _same_timeslot(event, reserve) for reserve in reserves):
+                return result
+            if attempt + 1 < self.verify_attempts:
+                time.sleep(self.verify_interval)
+        raise RuntimeError('TTRec API は成功を返しましたが、予約一覧に反映されませんでした')
 
 
 def _same_event(lhs: dict, rhs: dict) -> bool:

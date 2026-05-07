@@ -188,9 +188,12 @@ def _reserve_with_ttrec(events: list[dict], ttrec_url: str) -> None:
 
     success = 0
     for event in pending:
-        client.reserve_default(event)
-        print(f"  [予約] [{event['channel_name']}] {event['title']}")
-        success += 1
+        try:
+            client.reserve_default(event)
+            print(f"  [予約] [{event['channel_name']}] {event['title']}")
+            success += 1
+        except RuntimeError as exc:
+            print(f"  [失敗] [{event['channel_name']}] {event['title']}: {exc}")
 
     print(f"TTRec予約     : {success} 件追加しました")
 
