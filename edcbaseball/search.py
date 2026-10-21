@@ -66,7 +66,12 @@ def _is_likely_recorded_game(title: str, is_mlb: bool) -> bool:
 
 
 def _find_npb_matchup(title: str) -> bool:
-    """Return True if title contains two distinct NPB team keywords."""
+    """Return True if title contains two distinct NPB team keywords.
+
+    制約事項: タイトルは正規化せずそのまま照合している。地上波の日本シリーズ中継は
+    "ＤｅＮＡ" のように全角英字で、[生] も付かないため、チャンネルを登録しても
+    片方のチームしか一致せず除外される（--team DeNA でもヒットしない）。
+    """
     found = 0
     for team in NPB_TEAMS:
         if any(kw in title for kw in team['keywords']):

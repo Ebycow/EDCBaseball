@@ -1,5 +1,9 @@
 # Baseball-relevant channels in EDCB
 # onid/tsid/sid match EnumService output
+#
+# 制約事項: 地上波は登録していない。
+# 日本シリーズ等のポストシーズンは地上波のみで生中継される年があり（例: 2026年は
+# SBC信越放送のみ）、その場合はCSの録画再放送しか検索結果に出てこない。
 
 BASEBALL_CHANNELS = [
     # J SPORTS 1-4 (MLB live, NPB games)
